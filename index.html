@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Распознавание тела через камеру</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        #video {
+            width: 100%;
+            max-width: 640px;
+            height: 480px;
+            border-radius: 10px;
+            background: #000;
+            transform: scaleX(-1); /* Зеркальное отражение */
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            max-width: 640px;
+            height: 480px;
+            pointer-events: none;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            background: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #stopButton {
+            background: #f44336;
+        }
+        
+        #stopButton:hover {
+            background: #da190b;
+        }
+        
+        .info-panel {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        #info {
+            font-size: 16px;
+            line-height: 1.5;
+            color: #333;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .success {
+            background: #d1edff;
+            color: #004085;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            #video, #canvas {
+                height: 400px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #video, #canvas {
+                height: 300px;
+            }
+            
+            button {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕺 Распознавание тела и конечностей</h1>
+        
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div class="controls">
+            <button id="startButton">🎥 Включить камеру</button>
+            <button id="stopButton" disabled>⏹️ Остановить</button>
+            <button id="screenshotButton" disabled>📸 Сделать снимок</button>
+        </div>
+        
+        <div id="status" class="status loading">
+            ⏳ Загрузка нейросети...
+        </div>
+        
+        <div class="info-panel">
+            <div id="info">
+                Нажмите "Включить камеру" для начала распознавания
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    
+    <script>
+        // Элементы страницы
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const screenshotButton = document.getElementById('screenshotButton');
+        const status = document.getElementById('status');
+        const info = document.getElementById('info');
+        
+        let detector;
+        let isDetecting = false;
+        let animationId;
+
+        // Обновление статуса
+        function updateStatus(message, type = 'loading') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Инициализация детектора поз
+        async function initPoseDetector() {
+            try {
+                updateStatus('🚀 Загрузка TensorFlow.js...');
+                await tf.ready();
+                
+                updateStatus('📦 Загрузка модели распознавания поз...');
+                const model = poseDetection.SupportedModels.MoveNet;
+                detector = await poseDetection.createDetector(model, {
+                    modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+                });
+                
+                updateStatus('✅ Модель загружена!', 'success');
+                startButton.disabled = false;
+                
+            } catch (error) {
+                console.error('Ошибка инициализации:', error);
+                updateStatus('❌ Ошибка загрузки модели: ' + error.message, 'error');
+            }
+        }
+
+        // Запуск камеры
+        async function setupCamera() {
+            try {
+                updateStatus('📷 Запрос доступа к камере...');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user' 
+                    } 
+                });
+                
+                video.srcObject = stream;
+                
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        resolve(video);
+                    };
+                });
+                
+            } catch (error) {
+                console.error('Ошибка камеры:', error);
+                updateStatus('❌ Не удалось получить доступ к камере', 'error');
+                throw error;
+            }
+        }
+
+        // Расчет расстояния между точками
+        function calculateDistance(point1, point2) {
+            const dx = point1.x - point2.x;
+            const dy = point1.y - point2.y;
+            return Math.sqrt(dx * dx + dy * dy) * 100; // В условных единицах
+        }
+
+        // Отрисовка скелета
+        function drawSkeleton(keypoints) {
+            // Соединения между точками (скелет)
+            const connections = [
+                // Руки
+                [5, 7], [7, 9],     // Левая рука
+                [6, 8], [8, 10],    // Правая рука
+                // Тело
+                [5, 6], [5, 11], [6, 12], [11, 12],
+                // Ноги
+                [11, 13], [13, 15], // Левая нога
+                [12, 14], [14, 16]  // Правая нога
+            ];
+
+            // Рисуем линии
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 3;
+
+            connections.forEach(([i, j]) => {
+                const kp1 = keypoints[i];
+                const kp2 = keypoints[j];
+                
+                if (kp1.score > 0.3 && kp2.score > 0.3) {
+                    ctx.beginPath();
+                    ctx.moveTo(kp1.x * canvas.width, kp1.y * canvas.height);
+                    ctx.lineTo(kp2.x * canvas.width, kp2.y * canvas.height);
+                    ctx.stroke();
+                }
+            });
+
+            // Рисуем точки
+            keypoints.forEach((keypoint, index) => {
+                if (keypoint.score > 0.3) {
+                    const x = keypoint.x * canvas.width;
+                    const y = keypoint.y * canvas.height;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#FF0000';
+                    ctx.fill();
+                    
+                    // Подписи для ключевых точек
+                    if (index <= 10) {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.font = '12px Arial';
+                        ctx.fillText(index.toString(), x + 8, y - 8);
+                    }
+                }
+            });
+        }
+
+        // Отрисовка расстояний
+        function drawDistances(keypoints) {
+            ctx.strokeStyle = '#FF00FF';
+            ctx.lineWidth = 2;
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#FFFF00';
+
+            // Важные расстояния для отслеживания
+            const distances = [
+                { points: [5, 6], label: 'Плечи' },      // Плечи
+                { points: [9, 10], label: 'Кисти' },     // Кисти рук
+                { points: [5, 9], label: 'Левая рука' }, // Левая рука
+                { points: [6, 10], label: 'Правая рука' }, // Правая рука
+                { points: [11, 12], label: 'Бедра' },    // Бедра
+                { points: [11, 15], label: 'Левая нога' }, // Левая нога
+                { points: [12, 16], label: 'Правая нога' } // Правая нога
+            ];
+
+            distances.forEach(({ points: [i, j], label }) => {
+                const kp1 = keypoints[i];
+                const kp2 = keypoints[j];
+                
+                if (kp1 && kp2 && kp1.score > 0.3 && kp2.score > 0.3) {
+                    const x1 = kp1.x * canvas.width;
+                    const y1 = kp1.y * canvas.height;
+                    const x2 = kp2.x * canvas.width;
+                    const y2 = kp2.y * canvas.height;
+                    
+                    // Рисуем линию расстояния
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Подпись расстояния
+                    const midX = (x1 + x2) / 2;
+                    const midY = (y1 + y2) / 2;
+                    const distance = calculateDistance(kp1, kp2).toFixed(1);
+                    
+                    ctx.fillText(`${label}: ${distance}`, midX, midY);
+                }
+            });
+        }
+
+        // Обновление информации
+        function updateInfo(keypoints) {
+            let infoText = '🕺 Тело обнаружено!\n\n';
+            
+            // Основные расстояния
+            const distances = [
+                { points: [5, 6], label: '📏 Ширина плеч' },
+                { points: [9, 10], label: '👐 Расстояние между кистями' },
+                { points: [11, 12], label: '🦵 Ширина бедер' }
+            ];
+            
+            distances.forEach(({ points: [i, j], label }) => {
+                const kp1 = keypoints[i];
+                const kp2 = keypoints[j];
+                
+                if (kp1 && kp2 && kp1.score > 0.3 && kp2.score > 0.3) {
+                    const distance = calculateDistance(kp1, kp2).toFixed(1);
+                    infoText += `${label}: ${distance} ед.\n`;
+                }
+            });
+            
+            // Подсчет видимых точек
+            const visiblePoints = keypoints.filter(kp => kp.score > 0.3).length;
+            infoText += `\n📊 Видимых точек: ${visiblePoints}/17`;
+            
+            info.textContent = infoText;
+        }
+
+        // Основной цикл распознавания
+        async function detectPose() {
+            if (!isDetecting) return;
+            
+            try {
+                // Очищаем canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Распознаем позу
+                const poses = await detector.estimatePoses(video);
+                
+                if (poses.length > 0) {
+                    const pose = poses[0];
+                    const keypoints = pose.keypoints;
+                    
+                    // Отрисовываем скелет и расстояния
+                    drawSkeleton(keypoints);
+                    drawDistances(keypoints);
+                    updateInfo(keypoints);
+                    
+                    updateStatus('✅ Тело отслеживается', 'success');
+                } else {
+                    info.textContent = '❌ Тело не обнаружено. Встаньте перед камерой.';
+                    updateStatus('🔍 Поиск тела...', 'loading');
+                }
+                
+            } catch (error) {
+                console.error('Ошибка распознавания:', error);
+                updateStatus('❌ Ошибка распознавания', 'error');
+            }
+            
+            // Следующий кадр
+            animationId = requestAnimationFrame(detectPose);
+        }
+
+        // Снимок экрана
+        function takeScreenshot() {
+            const link = document.createElement('a');
+            link.download = 'body-tracking-screenshot.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        // Обработчики событий
+        startButton.addEventListener('click', async () => {
+            try {
+                startButton.disabled = true;
+                await setupCamera();
+                
+                stopButton.disabled = false;
+                screenshotButton.disabled = false;
+                isDetecting = true;
+                
+                updateStatus('🎯 Начало распознавания...', 'success');
+                detectPose();
+                
+            } catch (error) {
+                startButton.disabled = false;
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            isDetecting = false;
+            cancelAnimationFrame(animationId);
+            
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            screenshotButton.disabled = true;
+            
+            info.textContent = 'Камера остановлена. Нажмите "Включить камеру" для продолжения.';
+            updateStatus('⏹️ Камера остановлена', 'loading');
+        });
+
+        screenshotButton.addEventListener('click', takeScreenshot);
+
+        // Инициализация при загрузке страницы
+        window.addEventListener('load', initPoseDetector);
+    </script>
+</body>
+</html>
