@@ -4,7 +4,7 @@ import axios from 'axios';
 // Конфигурация API
 const API_CONFIG = {
   // Для разработки - укажите IP вашего компьютера в сети
-  BASE_URL: 'http://192.168.1.100:5000/api', // ЗАМЕНИТЕ НА ВАШ IP!
+  BASE_URL: 'http://192.168.0.134/api', // ЗАМЕНИТЕ НА ВАШ IP!
   TIMEOUT: 30000,
 };
 
