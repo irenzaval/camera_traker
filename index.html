@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Распознавание тела через камеру</title>
+    <title>Распознавание тела с визуализацией точек</title>
     <style>
         body {
             margin: 0;
@@ -17,7 +17,7 @@
         }
         
         .container {
-            max-width: 900px;
+            max-width: 1200px;
             width: 100%;
             background: white;
             border-radius: 15px;
@@ -29,6 +29,27 @@
             text-align: center;
             color: #333;
             margin-bottom: 20px;
+        }
+        
+        .main-content {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .video-section {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .points-section {
+            flex: 1;
+            min-width: 300px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 500px;
+            overflow-y: auto;
         }
         
         .video-container {
@@ -43,7 +64,7 @@
             height: 480px;
             border-radius: 10px;
             background: #000;
-            transform: scaleX(-1); /* Зеркальное отражение */
+            transform: scaleX(-1);
         }
         
         #canvas {
@@ -114,65 +135,165 @@
             font-weight: bold;
         }
         
-        .loading {
-            background: #fff3cd;
-            color: #856404;
+        .loading { background: #fff3cd; color: #856404; }
+        .success { background: #d1edff; color: #004085; }
+        .error { background: #f8d7da; color: #721c24; }
+        
+        /* Стили для таблицы точек */
+        .points-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
         }
         
-        .success {
-            background: #d1edff;
-            color: #004085;
+        .points-table th,
+        .points-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
         }
         
-        .error {
-            background: #f8d7da;
-            color: #721c24;
+        .points-table th {
+            background: #e9ecef;
+            font-weight: bold;
         }
+        
+        .points-table tr:hover {
+            background: #f1f3f4;
+        }
+        
+        .point-visual {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            border: 2px solid #fff;
+        }
+        
+        .point-visible { background: #28a745; }
+        .point-hidden { background: #dc3545; }
+        
+        .confidence-bar {
+            width: 100px;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            display: inline-block;
+            margin-left: 10px;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #dc3545, #ffc107, #28a745);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        .points-summary {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-item {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .summary-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .summary-label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .visible-point { color: #28a745; }
+        .hidden-point { color: #dc3545; }
         
         @media (max-width: 768px) {
-            body {
-                padding: 10px;
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .video-section, .points-section {
+                min-width: 100%;
             }
             
             #video, #canvas {
                 height: 400px;
             }
         }
-        
-        @media (max-width: 480px) {
-            #video, #canvas {
-                height: 300px;
-            }
-            
-            button {
-                padding: 10px 20px;
-                font-size: 14px;
-            }
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🕺 Распознавание тела и конечностей</h1>
+        <h1>🕺 Распознавание тела с визуализацией точек</h1>
         
-        <div class="video-container">
-            <video id="video" autoplay playsinline></video>
-            <canvas id="canvas"></canvas>
-        </div>
-        
-        <div class="controls">
-            <button id="startButton">🎥 Включить камеру</button>
-            <button id="stopButton" disabled>⏹️ Остановить</button>
-            <button id="screenshotButton" disabled>📸 Сделать снимок</button>
-        </div>
-        
-        <div id="status" class="status loading">
-            ⏳ Загрузка нейросети...
-        </div>
-        
-        <div class="info-panel">
-            <div id="info">
-                Нажмите "Включить камеру" для начала распознавания
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+                
+                <div class="controls">
+                    <button id="startButton">🎥 Включить камеру</button>
+                    <button id="stopButton" disabled>⏹️ Остановить</button>
+                    <button id="screenshotButton" disabled>📸 Снимок</button>
+                </div>
+                
+                <div id="status" class="status loading">
+                    ⏳ Загрузка нейросети...
+                </div>
+                
+                <div class="info-panel">
+                    <div id="info">
+                        Нажмите "Включить камеру" для начала распознавания
+                    </div>
+                </div>
+            </div>
+            
+            <div class="points-section">
+                <h3>📊 Детекция точек тела</h3>
+                
+                <div class="points-summary">
+                    <div class="summary-item">
+                        <div class="summary-value visible-point" id="visibleCount">0</div>
+                        <div class="summary-label">Видимых точек</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value hidden-point" id="hiddenCount">17</div>
+                        <div class="summary-label">Скрытых точек</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value" id="totalCount">17</div>
+                        <div class="summary-label">Всего точек</div>
+                    </div>
+                </div>
+                
+                <table class="points-table">
+                    <thead>
+                        <tr>
+                            <th>Точка</th>
+                            <th>Название</th>
+                            <th>Статус</th>
+                            <th>Уверенность</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pointsTable">
+                        <!-- Точки будут добавляться динамически -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -190,10 +311,38 @@
         const screenshotButton = document.getElementById('screenshotButton');
         const status = document.getElementById('status');
         const info = document.getElementById('info');
+        const pointsTable = document.getElementById('pointsTable');
+        const visibleCount = document.getElementById('visibleCount');
+        const hiddenCount = document.getElementById('hiddenCount');
+        const totalCount = document.getElementById('totalCount');
         
         let detector;
         let isDetecting = false;
         let animationId;
+
+        // Названия ключевых точек тела
+        const BODY_POINTS = [
+            "Нос", "Левое глазо", "Правое глазо", "Левое ухо", "Правое ухо",
+            "Левое плечо", "Правое плечо", "Левый локоть", "Правый локоть",
+            "Левое запястье", "Правое запястье", "Левое бедро", "Правое бедро",
+            "Левое колено", "Правое колено", "Левая лодыжка", "Правая лодыжка"
+        ];
+
+        // Цвета для разных частей тела
+        const POINT_COLORS = {
+            head: '#FF6B6B',      // Красный - голова
+            arms: '#4ECDC4',      // Бирюзовый - руки
+            torso: '#45B7D1',     // Синий - торс
+            legs: '#96CEB4'       // Зеленый - ноги
+        };
+
+        // Группы точек по частям тела
+        const POINT_GROUPS = {
+            head: [0, 1, 2, 3, 4],           // Голова
+            arms: [5, 6, 7, 8, 9, 10],       // Руки
+            torso: [5, 6, 11, 12],           // Торс
+            legs: [11, 12, 13, 14, 15, 16]   // Ноги
+        };
 
         // Обновление статуса
         function updateStatus(message, type = 'loading') {
@@ -216,10 +365,52 @@
                 updateStatus('✅ Модель загружена!', 'success');
                 startButton.disabled = false;
                 
+                // Инициализируем таблицу точек
+                initializePointsTable();
+                
             } catch (error) {
                 console.error('Ошибка инициализации:', error);
                 updateStatus('❌ Ошибка загрузки модели: ' + error.message, 'error');
             }
+        }
+
+        // Инициализация таблицы точек
+        function initializePointsTable() {
+            pointsTable.innerHTML = '';
+            
+            BODY_POINTS.forEach((pointName, index) => {
+                const row = document.createElement('tr');
+                const group = getPointGroup(index);
+                const color = POINT_COLORS[group];
+                
+                row.innerHTML = `
+                    <td>
+                        <span class="point-visual point-hidden" style="border-color: ${color}"></span>
+                        ${index}
+                    </td>
+                    <td>${pointName}</td>
+                    <td>
+                        <span class="status-text" style="color: #dc3545">❌ Скрыта</span>
+                    </td>
+                    <td>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="confidence-text">0%</span>
+                    </td>
+                `;
+                
+                pointsTable.appendChild(row);
+            });
+        }
+
+        // Получение группы точки
+        function getPointGroup(index) {
+            if (POINT_GROUPS.head.includes(index)) return 'head';
+            if (POINT_GROUPS.arms.includes(index)) return 'arms';
+            if (POINT_GROUPS.torso.includes(index)) return 'torso';
+            if (POINT_GROUPS.legs.includes(index)) return 'legs';
+            return 'head';
         }
 
         // Запуск камеры
@@ -257,32 +448,47 @@
         function calculateDistance(point1, point2) {
             const dx = point1.x - point2.x;
             const dy = point1.y - point2.y;
-            return Math.sqrt(dx * dx + dy * dy) * 100; // В условных единицах
+            return Math.sqrt(dx * dx + dy * dy) * 100;
         }
 
-        // Отрисовка скелета
+        // Отрисовка скелета с цветовым кодированием
         function drawSkeleton(keypoints) {
-            // Соединения между точками (скелет)
+            // Соединения между точками с цветами по группам
             const connections = [
+                // Голова
+                { points: [0, 1], color: POINT_COLORS.head },
+                { points: [0, 2], color: POINT_COLORS.head },
+                { points: [1, 3], color: POINT_COLORS.head },
+                { points: [2, 4], color: POINT_COLORS.head },
+                
                 // Руки
-                [5, 7], [7, 9],     // Левая рука
-                [6, 8], [8, 10],    // Правая рука
-                // Тело
-                [5, 6], [5, 11], [6, 12], [11, 12],
+                { points: [5, 7], color: POINT_COLORS.arms },
+                { points: [7, 9], color: POINT_COLORS.arms },
+                { points: [6, 8], color: POINT_COLORS.arms },
+                { points: [8, 10], color: POINT_COLORS.arms },
+                
+                // Торс
+                { points: [5, 6], color: POINT_COLORS.torso },
+                { points: [5, 11], color: POINT_COLORS.torso },
+                { points: [6, 12], color: POINT_COLORS.torso },
+                { points: [11, 12], color: POINT_COLORS.torso },
+                
                 // Ноги
-                [11, 13], [13, 15], // Левая нога
-                [12, 14], [14, 16]  // Правая нога
+                { points: [11, 13], color: POINT_COLORS.legs },
+                { points: [13, 15], color: POINT_COLORS.legs },
+                { points: [12, 14], color: POINT_COLORS.legs },
+                { points: [14, 16], color: POINT_COLORS.legs }
             ];
 
-            // Рисуем линии
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 3;
-
-            connections.forEach(([i, j]) => {
+            // Рисуем линии соединений
+            connections.forEach(connection => {
+                const [i, j] = connection.points;
                 const kp1 = keypoints[i];
                 const kp2 = keypoints[j];
                 
                 if (kp1.score > 0.3 && kp2.score > 0.3) {
+                    ctx.strokeStyle = connection.color;
+                    ctx.lineWidth = 3;
                     ctx.beginPath();
                     ctx.moveTo(kp1.x * canvas.width, kp1.y * canvas.height);
                     ctx.lineTo(kp2.x * canvas.width, kp2.y * canvas.height);
@@ -290,23 +496,35 @@
                 }
             });
 
-            // Рисуем точки
+            // Рисуем точки с цветовым кодированием
             keypoints.forEach((keypoint, index) => {
-                if (keypoint.score > 0.3) {
+                if (keypoint.score > 0.1) { // Более низкий порог для отображения
                     const x = keypoint.x * canvas.width;
                     const y = keypoint.y * canvas.height;
+                    const group = getPointGroup(index);
+                    const color = POINT_COLORS[group];
                     
+                    // Внешний круг
                     ctx.beginPath();
-                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
-                    ctx.fillStyle = '#FF0000';
+                    ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                    ctx.fillStyle = color;
                     ctx.fill();
                     
-                    // Подписи для ключевых точек
-                    if (index <= 10) {
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.font = '12px Arial';
-                        ctx.fillText(index.toString(), x + 8, y - 8);
-                    }
+                    // Внутренний круг (показывает уверенность)
+                    const confidence = Math.min(keypoint.score * 100, 100);
+                    const innerRadius = 4 * (confidence / 100);
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, innerRadius, 0, 2 * Math.PI);
+                    ctx.fillStyle = confidence > 50 ? '#FFFFFF' : '#FFEB3B';
+                    ctx.fill();
+                    
+                    // Номер точки
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(index.toString(), x, y);
                 }
             });
         }
@@ -315,18 +533,15 @@
         function drawDistances(keypoints) {
             ctx.strokeStyle = '#FF00FF';
             ctx.lineWidth = 2;
-            ctx.font = '14px Arial';
-            ctx.fillStyle = '#FFFF00';
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#333333';
 
-            // Важные расстояния для отслеживания
             const distances = [
-                { points: [5, 6], label: 'Плечи' },      // Плечи
-                { points: [9, 10], label: 'Кисти' },     // Кисти рук
-                { points: [5, 9], label: 'Левая рука' }, // Левая рука
-                { points: [6, 10], label: 'Правая рука' }, // Правая рука
-                { points: [11, 12], label: 'Бедра' },    // Бедра
-                { points: [11, 15], label: 'Левая нога' }, // Левая нога
-                { points: [12, 16], label: 'Правая нога' } // Правая нога
+                { points: [5, 6], label: 'Плечи' },
+                { points: [9, 10], label: 'Кисти' },
+                { points: [11, 12], label: 'Бедра' },
+                { points: [5, 11], label: 'Левая сторона' },
+                { points: [6, 12], label: 'Правая сторона' }
             ];
 
             distances.forEach(({ points: [i, j], label }) => {
@@ -339,7 +554,7 @@
                     const x2 = kp2.x * canvas.width;
                     const y2 = kp2.y * canvas.height;
                     
-                    // Рисуем линию расстояния
+                    // Пунктирная линия расстояния
                     ctx.setLineDash([5, 5]);
                     ctx.beginPath();
                     ctx.moveTo(x1, y1);
@@ -352,35 +567,80 @@
                     const midY = (y1 + y2) / 2;
                     const distance = calculateDistance(kp1, kp2).toFixed(1);
                     
-                    ctx.fillText(`${label}: ${distance}`, midX, midY);
+                    // Фон для текста
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillRect(midX - 25, midY - 15, 50, 20);
+                    
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(`${distance}`, midX, midY);
                 }
             });
         }
 
-        // Обновление информации
-        function updateInfo(keypoints) {
-            let infoText = '🕺 Тело обнаружено!\n\n';
+        // Обновление таблицы точек
+        function updatePointsTable(keypoints) {
+            let visiblePoints = 0;
             
-            // Основные расстояния
-            const distances = [
-                { points: [5, 6], label: '📏 Ширина плеч' },
-                { points: [9, 10], label: '👐 Расстояние между кистями' },
-                { points: [11, 12], label: '🦵 Ширина бедер' }
-            ];
-            
-            distances.forEach(({ points: [i, j], label }) => {
-                const kp1 = keypoints[i];
-                const kp2 = keypoints[j];
+            keypoints.forEach((keypoint, index) => {
+                const row = pointsTable.rows[index];
+                if (!row) return;
                 
-                if (kp1 && kp2 && kp1.score > 0.3 && kp2.score > 0.3) {
-                    const distance = calculateDistance(kp1, kp2).toFixed(1);
-                    infoText += `${label}: ${distance} ед.\n`;
-                }
+                const confidence = Math.round(keypoint.score * 100);
+                const isVisible = confidence >= 30;
+                const group = getPointGroup(index);
+                const color = POINT_COLORS[group];
+                
+                // Обновляем визуальный индикатор
+                const pointVisual = row.querySelector('.point-visual');
+                pointVisual.className = `point-visual ${isVisible ? 'point-visible' : 'point-hidden'}`;
+                pointVisual.style.borderColor = color;
+                
+                // Обновляем статус
+                const statusText = row.querySelector('.status-text');
+                statusText.textContent = isVisible ? '✅ Видима' : '❌ Скрыта';
+                statusText.style.color = isVisible ? '#28a745' : '#dc3545';
+                
+                // Обновляем уверенность
+                const confidenceFill = row.querySelector('.confidence-fill');
+                const confidenceText = row.querySelector('.confidence-text');
+                confidenceFill.style.width = `${confidence}%`;
+                confidenceText.textContent = `${confidence}%`;
+                
+                if (isVisible) visiblePoints++;
             });
             
-            // Подсчет видимых точек
-            const visiblePoints = keypoints.filter(kp => kp.score > 0.3).length;
-            infoText += `\n📊 Видимых точек: ${visiblePoints}/17`;
+            // Обновляем счетчики
+            visibleCount.textContent = visiblePoints;
+            hiddenCount.textContent = BODY_POINTS.length - visiblePoints;
+            totalCount.textContent = BODY_POINTS.length;
+            
+            // Обновляем цвет счетчиков
+            visibleCount.className = `summary-value ${visiblePoints > 0 ? 'visible-point' : ''}`;
+            hiddenCount.className = `summary-value ${visiblePoints < BODY_POINTS.length ? 'hidden-point' : ''}`;
+        }
+
+        // Обновление информации
+        function updateInfo(keypoints) {
+            const visiblePoints = keypoints.filter(kp => kp.score >= 0.3).length;
+            const totalPoints = BODY_POINTS.length;
+            const coverage = Math.round((visiblePoints / totalPoints) * 100);
+            
+            let infoText = `🕺 Тело обнаружено!\n\n`;
+            infoText += `📊 Покрытие: ${coverage}% (${visiblePoints}/${totalPoints} точек)\n\n`;
+            
+            // Группируем точки по видимости
+            const groups = {
+                'Голова': keypoints.slice(0, 5).filter(kp => kp.score >= 0.3).length,
+                'Руки': keypoints.slice(5, 11).filter(kp => kp.score >= 0.3).length,
+                'Торс': [5,6,11,12].map(i => keypoints[i]).filter(kp => kp.score >= 0.3).length,
+                'Ноги': keypoints.slice(11).filter(kp => kp.score >= 0.3).length
+            };
+            
+            Object.entries(groups).forEach(([group, count]) => {
+                const total = group === 'Голова' ? 5 : group === 'Руки' ? 6 : group === 'Торс' ? 4 : 6;
+                const percent = Math.round((count / total) * 100);
+                infoText += `${group}: ${count}/${total} (${percent}%)\n`;
+            });
             
             info.textContent = infoText;
         }
@@ -403,10 +663,12 @@
                     // Отрисовываем скелет и расстояния
                     drawSkeleton(keypoints);
                     drawDistances(keypoints);
+                    updatePointsTable(keypoints);
                     updateInfo(keypoints);
                     
-                    updateStatus('✅ Тело отслеживается', 'success');
+                    updateStatus(`✅ Отслеживается: ${keypoints.filter(kp => kp.score >= 0.3).length}/17 точек`, 'success');
                 } else {
+                    updatePointsTable(Array(17).fill().map(() => ({ score: 0 })));
                     info.textContent = '❌ Тело не обнаружено. Встаньте перед камерой.';
                     updateStatus('🔍 Поиск тела...', 'loading');
                 }
@@ -423,7 +685,7 @@
         // Снимок экрана
         function takeScreenshot() {
             const link = document.createElement('a');
-            link.download = 'body-tracking-screenshot.png';
+            link.download = `body-tracking-${new Date().getTime()}.png`;
             link.href = canvas.toDataURL();
             link.click();
         }
@@ -463,6 +725,9 @@
             
             info.textContent = 'Камера остановлена. Нажмите "Включить камеру" для продолжения.';
             updateStatus('⏹️ Камера остановлена', 'loading');
+            
+            // Сбрасываем таблицу точек
+            initializePointsTable();
         });
 
         screenshotButton.addEventListener('click', takeScreenshot);
